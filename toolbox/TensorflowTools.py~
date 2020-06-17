@@ -1,0 +1,472 @@
+import tensorflow as tf
+
+def mlc_archi_3(input, keep_prob):
+	with tf.name_scope("Archi-3"):
+		# input size is batch_sizex20x20x6
+		# 5x5x3 is the kernel size of conv1,1 is the input depth,64 is the number output channel
+		w_conv1 = tf.Variable(tf.random_normal([3,5,5,1,64],stddev=0.001),dtype=tf.float32,name='w_conv1')
+		b_conv1 = tf.Variable(tf.constant(0.01,shape=[64]),dtype=tf.float32,name='b_conv1')
+		out_conv1 = tf.nn.relu(tf.add(tf.nn.conv3d(input,w_conv1,strides=[1,1,1,1,1],padding='VALID'),b_conv1))
+		out_conv1 = tf.nn.dropout(out_conv1,keep_prob)
+
+		# max pooling ,pooling layer has no effect on the data size
+		hidden_conv1 = tf.nn.max_pool3d(out_conv1,strides=[1,1,1,1,1],ksize=[1,2,2,2,1],padding='SAME')
+
+		# after conv1 ,the output size is batch_sizex4x16x16x64([batch_size,in_deep,width,height,output_deep])
+		w_conv2 = tf.Variable(tf.random_normal([3,5, 5, 64,64], stddev=0.001), dtype=tf.float32,name='w_conv2')
+		b_conv2 = tf.Variable(tf.constant(0.01, shape=[64]), dtype=tf.float32, name='b_conv2')
+		out_conv2 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1, 1, 1,1, 1], padding='VALID'), b_conv2))
+		out_conv2 = tf.nn.dropout(out_conv2, keep_prob)
+
+		# after conv2 ,the output size is batch_sizex2x12x12x64([batch_size,in_deep,width,height,output_deep])
+		w_conv3 = tf.Variable(tf.random_normal([3,5, 5, 64,64], stddev=0.001), dtype=tf.float32,
+					name='w_conv3')
+		b_conv3 = tf.Variable(tf.constant(0.01, shape=[64]), dtype=tf.float32, name='b_conv3')
+		out_conv3 = tf.nn.relu(tf.add(tf.nn.conv3d(out_conv2, w_conv3, strides=[1, 1, 1, 1,1], padding='VALID'),b_conv3))
+		out_conv3 = tf.nn.dropout(out_conv3, keep_prob)
+
+		out_conv3_shape = tf.shape(out_conv3)
+		tf.summary.scalar('out_conv3_shape', out_conv3_shape[0])
+		#print(out_conv3)
+		# after conv2 ,the output size is batch_sizex2x8x8x64([batch_size,in_deep,width,height,output_deep])
+		# all feature map flatten to one dimension vector,this vector will be much long
+		out_conv3 = tf.reshape(out_conv3,[-1,64*28*28*20])
+		w_fc1 = tf.Variable(tf.random_normal([64*28*28*20,250],stddev=0.001),name='w_fc1')
+		out_fc1 = tf.nn.relu(tf.add(tf.matmul(out_conv3,w_fc1),tf.constant(0.001,shape=[250])))
+		out_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+		out_fc1_shape = tf.shape(out_fc1)
+		tf.summary.scalar('out_fc1_shape', out_fc1_shape[0])
+
+		w_fc2 = tf.Variable(tf.random_normal([250, 2], stddev=0.001), name='w_fc2')
+		out_fc2 = tf.nn.relu(tf.add(tf.matmul(out_fc1, w_fc2), tf.constant(0.001, shape=[2])))
+		out_fc2 = tf.nn.dropout(out_fc2, keep_prob)
+
+		w_sm = tf.Variable(tf.random_normal([2, 2], stddev=0.001), name='w_sm')
+		b_sm = tf.constant(0.001, shape=[2])
+		out_sm = tf.nn.softmax(tf.add(tf.matmul(out_fc2, w_sm), b_sm))
+
+		return out_sm
+
+def volume_net_l5_56(input, dropout_rate=0.3):
+	keep_prob = tf.constant(1-dropout_rate, dtype=tf.float32)
+	w_conv1 = tf.Variable(tf.random_normal([3,3,3,1,16],stddev=0.1),dtype=tf.float32,name='w_conv1')
+	b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1),dtype=tf.float32,name='b_conv1')
+	out_conv1 = tf.nn.relu(tf.add(tf.nn.conv3d(input,w_conv1,strides=[1,1,1,1,1],padding='VALID'),b_conv1))
+	dropout_conv1 = tf.nn.dropout(out_conv1,keep_prob)
+	hidden_conv1 = tf.nn.max_pool3d(dropout_conv1,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4,4,4,16,32], stddev=0.1), dtype=tf.float32,name='w_conv2')
+	b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1,1,1,1,1], padding='VALID'), b_conv2))
+	dropout_conv2 = tf.nn.dropout(out_conv2, keep_prob)
+	hidden_conv2 = tf.nn.max_pool3d(dropout_conv2,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([5,5,5,32,64], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1,1,1,1,1], padding='VALID'), b_conv3))
+	dropout_conv3 = tf.nn.dropout(out_conv3, keep_prob)
+	hidden_conv3 = tf.nn.max_pool3d(dropout_conv3,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv3 = tf.reshape(hidden_conv3,[-1,64*4*4*4])
+	w_fc1 = tf.Variable(tf.random_normal([64*4*4*4,128],stddev=0.1),name='w_fc1')
+	b_fc1 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.nn.relu(tf.add(tf.matmul(flattened_conv3,w_fc1),b_fc1))
+	dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([128, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_fc1, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, dropout_fc1, w_fc2, b_fc2, out_fc2, out_sm
+	return out_fc2, out_sm
+
+
+def volume_net2_l5_56(input, dropout_rate=0.3):
+	keep_prob = tf.constant(1-dropout_rate, dtype=tf.float32)
+	w_conv1 = tf.Variable(tf.random_normal([3,3,3,1,16],stddev=0.1),dtype=tf.float32,name='w_conv1')
+	b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1),dtype=tf.float32,name='b_conv1')
+	out_conv1 = tf.nn.relu(tf.add(tf.nn.conv3d(input,w_conv1,strides=[1,1,1,1,1],padding='VALID'),b_conv1))
+	dropout_conv1 = tf.nn.dropout(out_conv1,keep_prob)
+	hidden_conv1 = tf.nn.max_pool3d(dropout_conv1,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4,4,4,16,32], stddev=0.1), dtype=tf.float32,name='w_conv2')
+	b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1,1,1,1,1], padding='VALID'), b_conv2))
+	dropout_conv2 = tf.nn.dropout(out_conv2, keep_prob)
+	hidden_conv2 = tf.nn.max_pool3d(dropout_conv2,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([5,5,5,32,64], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1,1,1,1,1], padding='VALID'), b_conv3))
+	dropout_conv3 = tf.nn.dropout(out_conv3, keep_prob)
+	hidden_conv3 = tf.nn.max_pool3d(dropout_conv3,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex5x5x5x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([4,4,4,64,128], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	b_conv4 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.relu(
+		tf.add(tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID'), b_conv4))
+	dropout_conv4 = tf.nn.dropout(out_conv4, keep_prob)
+	#hidden_conv4 = tf.nn.max_pool3d(dropout_conv4, strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv4 = tf.reshape(dropout_conv4,[-1,128])
+	w_fc1 = tf.Variable(tf.random_normal([128,2],stddev=0.1),name='w_fc1')
+	b_fc1 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.nn.relu(tf.add(tf.matmul(flattened_conv4,w_fc1),b_fc1))
+
+	out_sm = tf.nn.softmax(out_fc1)
+
+	#return hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, dropout_fc1, w_fc2, b_fc2, out_fc2, out_sm
+	return out_fc1, out_sm
+
+def volume_net_l6_56(input, dropout_rate=0.3):
+	keep_prob = tf.constant(1-dropout_rate, dtype=tf.float32)
+	w_conv1 = tf.Variable(tf.random_normal([3,3,3,1,16],stddev=0.1),dtype=tf.float32,name='w_conv1')
+	b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1),dtype=tf.float32,name='b_conv1')
+	out_conv1 = tf.nn.relu(tf.add(tf.nn.conv3d(input,w_conv1,strides=[1,1,1,1,1],padding='VALID'),b_conv1))
+	dropout_conv1 = tf.nn.dropout(out_conv1,keep_prob)
+	hidden_conv1 = tf.nn.max_pool3d(dropout_conv1,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4,4,4,16,32], stddev=0.1), dtype=tf.float32,name='w_conv2')
+	b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1,1,1,1,1], padding='VALID'), b_conv2))
+	dropout_conv2 = tf.nn.dropout(out_conv2, keep_prob)
+	hidden_conv2 = tf.nn.max_pool3d(dropout_conv2,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([5,5,5,32,64], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1,1,1,1,1], padding='VALID'), b_conv3))
+	dropout_conv3 = tf.nn.dropout(out_conv3, keep_prob)
+	hidden_conv3 = tf.nn.max_pool3d(dropout_conv3,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([4,4,4,64,128], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	b_conv4 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.relu(
+		tf.add(tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID'), b_conv4))
+	dropout_conv4 = tf.nn.dropout(out_conv4, keep_prob)
+	#hidden_conv4 = tf.nn.max_pool3d(dropout_conv4, strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv4 = tf.reshape(dropout_conv4,[-1,128])
+	w_fc1 = tf.Variable(tf.random_normal([128,128],stddev=0.1),name='w_fc1')
+	b_fc1 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.nn.relu(tf.add(tf.matmul(flattened_conv4,w_fc1),b_fc1))
+	#dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([128, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_fc1, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, dropout_fc1, w_fc2, b_fc2, out_fc2, out_sm
+	return out_fc2, out_sm
+
+def volume_net2_l6_56(input, dropout_rate=0.3):
+	keep_prob = tf.constant(1-dropout_rate, dtype=tf.float32)
+	w_conv1 = tf.Variable(tf.random_normal([3,3,3,1,16],stddev=0.1),dtype=tf.float32,name='w_conv1')
+	b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1),dtype=tf.float32,name='b_conv1')
+	out_conv1 = tf.nn.relu(tf.add(tf.nn.conv3d(input,w_conv1,strides=[1,1,1,1,1],padding='VALID'),b_conv1))
+	dropout_conv1 = tf.nn.dropout(out_conv1,keep_prob)
+	hidden_conv1 = tf.nn.max_pool3d(dropout_conv1,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4,4,4,16,32], stddev=0.1), dtype=tf.float32,name='w_conv2')
+	b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1,1,1,1,1], padding='VALID'), b_conv2))
+	dropout_conv2 = tf.nn.dropout(out_conv2, keep_prob)
+	hidden_conv2 = tf.nn.max_pool3d(dropout_conv2,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([3,3,3,32,64], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1,1,1,1,1], padding='VALID'), b_conv3))
+	dropout_conv3 = tf.nn.dropout(out_conv3, keep_prob)
+	hidden_conv3 = tf.nn.max_pool3d(dropout_conv3,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([5,5,5,64,128], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	b_conv4 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.relu(
+		tf.add(tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID'), b_conv4))
+	dropout_conv4 = tf.nn.dropout(out_conv4, keep_prob)
+	#hidden_conv4 = tf.nn.max_pool3d(dropout_conv4, strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv4 = tf.reshape(dropout_conv4,[-1,128])
+	w_fc1 = tf.Variable(tf.random_normal([128,128],stddev=0.1),name='w_fc1')
+	b_fc1 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.nn.relu(tf.add(tf.matmul(flattened_conv4,w_fc1),b_fc1))
+	#dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([128, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_fc1, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, dropout_fc1, w_fc2, b_fc2, out_fc2, out_sm
+	return out_fc2, out_sm
+
+
+def volume_net3_l6_56(input, dropout_rate=0.3):
+	keep_prob = tf.constant(1-dropout_rate, dtype=tf.float32)
+	w_conv1 = tf.Variable(tf.random_normal([3,3,3,1,64],stddev=0.1),dtype=tf.float32,name='w_conv1')
+	b_conv1 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1),dtype=tf.float32,name='b_conv1')
+	out_conv1 = tf.nn.relu(tf.add(tf.nn.conv3d(input,w_conv1,strides=[1,1,1,1,1],padding='VALID'),b_conv1))
+	dropout_conv1 = tf.nn.dropout(out_conv1,keep_prob)
+	hidden_conv1 = tf.nn.max_pool3d(dropout_conv1,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4,4,4,64,128], stddev=0.1), dtype=tf.float32,name='w_conv2')
+	b_conv2 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1,1,1,1,1], padding='VALID'), b_conv2))
+	dropout_conv2 = tf.nn.dropout(out_conv2, keep_prob)
+	hidden_conv2 = tf.nn.max_pool3d(dropout_conv2,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([3,3,3,128,256], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	b_conv3 = tf.Variable(tf.random_normal(shape=[256], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.relu(tf.add(tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1,1,1,1,1], padding='VALID'), b_conv3))
+	dropout_conv3 = tf.nn.dropout(out_conv3, keep_prob)
+	hidden_conv3 = tf.nn.max_pool3d(dropout_conv3,strides=[1,2,2,2,1],ksize=[1,2,2,2,1],padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([5,5,5,256,512], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	b_conv4 = tf.Variable(tf.random_normal(shape=[512], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.relu(
+		tf.add(tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID'), b_conv4))
+	dropout_conv4 = tf.nn.dropout(out_conv4, keep_prob)
+	#hidden_conv4 = tf.nn.max_pool3d(dropout_conv4, strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv4 = tf.reshape(dropout_conv4,[-1,512])
+	w_fc1 = tf.Variable(tf.random_normal([512,512],stddev=0.1),name='w_fc1')
+	b_fc1 = tf.Variable(tf.random_normal(shape=[512], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.nn.relu(tf.add(tf.matmul(flattened_conv4,w_fc1),b_fc1))
+	dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([512, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_fc1, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, dropout_fc1, w_fc2, b_fc2, out_fc2, out_sm
+	return out_fc2, out_sm
+
+def volume_bnnet_l6_56(input):
+	#bn_mean = tf.constant(0, dtype=tf.float32)
+	#bn_variance = tf.constant(1, dtype=tf.float32)
+	bn_variance_epsilon = tf.constant(0.0000000000001, dtype=tf.float32)
+
+	w_conv1 = tf.Variable(tf.random_normal([3, 3, 3, 1, 16], stddev=0.1), dtype=tf.float32, name='w_conv1')
+	#b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1), dtype=tf.float32, name='b_conv1')
+	out_conv1 = tf.nn.conv3d(input, w_conv1, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean1, bn_var1 = tf.nn.moments(out_conv1, 0)
+	r_bn1 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn1')
+	b_bn1 = tf.Variable(tf.random_normal([54, 54, 54, 16], stddev=0.1), dtype=tf.float32, name='b_bn1')
+	out_bn1 = tf.nn.batch_normalization(out_conv1, bn_mean1, bn_var1, b_bn1, r_bn1, bn_variance_epsilon)
+	hidden_conv1 = tf.nn.max_pool3d(tf.nn.relu(out_bn1), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4, 4, 4, 16, 32], stddev=0.1), dtype=tf.float32, name='w_conv2')
+	#b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean2, bn_var2 = tf.nn.moments(out_conv2, 0)
+	r_bn2 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn2')
+	b_bn2 = tf.Variable(tf.random_normal([24, 24, 24, 32], stddev=0.1), dtype=tf.float32, name='b_bn2')
+	out_bn2 = tf.nn.batch_normalization(out_conv2, bn_mean2, bn_var2, b_bn2, r_bn2, bn_variance_epsilon)
+	hidden_conv2 = tf.nn.max_pool3d(tf.nn.relu(out_bn2), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([5, 5, 5, 32, 64], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	#b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean3, bn_var3 = tf.nn.moments(out_conv3, 0)
+	r_bn3 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn3')
+	b_bn3 = tf.Variable(tf.random_normal([8, 8, 8, 64], stddev=0.1), dtype=tf.float32, name='b_bn3')
+	out_bn3 = tf.nn.batch_normalization(out_conv3, bn_mean3, bn_var3, b_bn3, r_bn3, bn_variance_epsilon)
+	hidden_conv3 = tf.nn.max_pool3d(tf.nn.relu(out_bn3), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([4, 4, 4, 64, 128], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	#b_conv4 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean4, bn_var4 = tf.nn.moments(out_conv4, 0)
+	r_bn4 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn4')
+	b_bn4 = tf.Variable(tf.random_normal([1, 1, 1, 128], stddev=0.1), dtype=tf.float32, name='b_bn4')
+	out_bn4 = tf.nn.batch_normalization(out_conv4, bn_mean4, bn_var4, b_bn4, r_bn4, bn_variance_epsilon)
+	out_rl4 = tf.nn.relu(out_bn4)
+	# hidden_conv4 = tf.nn.max_pool3d(dropout_conv4, strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv4 = tf.reshape(out_rl4, [-1, 128])
+	w_fc1 = tf.Variable(tf.random_normal([128, 128], stddev=0.1), name='w_fc1')
+	#b_fc1 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.matmul(flattened_conv4, w_fc1)
+	r_bn5 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn5')
+	b_bn5 = tf.Variable(tf.random_normal([128], stddev=0.1), dtype=tf.float32, name='b_bn5')
+	bn_mean5, bn_var5 = tf.nn.moments(out_fc1, 0)
+	out_bn5 = tf.nn.batch_normalization(out_fc1, bn_mean5, bn_var5, b_bn5, r_bn5, bn_variance_epsilon)
+	out_rl5 = tf.nn.relu(out_bn5)
+	# dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([128, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_rl5, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return bn_mean1, bn_var1, out_conv1, out_bn1, hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, out_fc2, out_sm
+	return out_fc2, out_sm
+
+def volume_bnnet_l6_56(input):
+	#bn_mean = tf.constant(0, dtype=tf.float32)
+	#bn_variance = tf.constant(1, dtype=tf.float32)
+	bn_variance_epsilon = tf.constant(0.0000000000001, dtype=tf.float32)
+
+	w_conv1 = tf.Variable(tf.random_normal([3, 3, 3, 1, 16], stddev=0.1), dtype=tf.float32, name='w_conv1')
+	#b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1), dtype=tf.float32, name='b_conv1')
+	out_conv1 = tf.nn.conv3d(input, w_conv1, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean1, bn_var1 = tf.nn.moments(out_conv1, 0)
+	r_bn1 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn1')
+	b_bn1 = tf.Variable(tf.random_normal([54, 54, 54, 16], stddev=0.1), dtype=tf.float32, name='b_bn1')
+	out_bn1 = tf.nn.batch_normalization(out_conv1, bn_mean1, bn_var1, b_bn1, r_bn1, bn_variance_epsilon)
+	hidden_conv1 = tf.nn.max_pool3d(tf.nn.relu(out_bn1), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4, 4, 4, 16, 32], stddev=0.1), dtype=tf.float32, name='w_conv2')
+	#b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean2, bn_var2 = tf.nn.moments(out_conv2, 0)
+	r_bn2 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn2')
+	b_bn2 = tf.Variable(tf.random_normal([24, 24, 24, 32], stddev=0.1), dtype=tf.float32, name='b_bn2')
+	out_bn2 = tf.nn.batch_normalization(out_conv2, bn_mean2, bn_var2, b_bn2, r_bn2, bn_variance_epsilon)
+	hidden_conv2 = tf.nn.max_pool3d(tf.nn.relu(out_bn2), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([5, 5, 5, 32, 64], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	#b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean3, bn_var3 = tf.nn.moments(out_conv3, 0)
+	r_bn3 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn3')
+	b_bn3 = tf.Variable(tf.random_normal([8, 8, 8, 64], stddev=0.1), dtype=tf.float32, name='b_bn3')
+	out_bn3 = tf.nn.batch_normalization(out_conv3, bn_mean3, bn_var3, b_bn3, r_bn3, bn_variance_epsilon)
+	hidden_conv3 = tf.nn.max_pool3d(tf.nn.relu(out_bn3), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([4, 4, 4, 64, 128], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	#b_conv4 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean4, bn_var4 = tf.nn.moments(out_conv4, 0)
+	r_bn4 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn4')
+	b_bn4 = tf.Variable(tf.random_normal([1, 1, 1, 128], stddev=0.1), dtype=tf.float32, name='b_bn4')
+	out_bn4 = tf.nn.batch_normalization(out_conv4, bn_mean4, bn_var4, b_bn4, r_bn4, bn_variance_epsilon)
+	out_rl4 = tf.nn.relu(out_bn4)
+	# hidden_conv4 = tf.nn.max_pool3d(dropout_conv4, strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	flattened_conv4 = tf.reshape(out_rl4, [-1, 128])
+	w_fc1 = tf.Variable(tf.random_normal([128, 128], stddev=0.1), name='w_fc1')
+	#b_fc1 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.matmul(flattened_conv4, w_fc1)
+	r_bn5 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn5')
+	b_bn5 = tf.Variable(tf.random_normal([128], stddev=0.1), dtype=tf.float32, name='b_bn5')
+	bn_mean5, bn_var5 = tf.nn.moments(out_fc1, 0)
+	out_bn5 = tf.nn.batch_normalization(out_fc1, bn_mean5, bn_var5, b_bn5, r_bn5, bn_variance_epsilon)
+	out_rl5 = tf.nn.relu(out_bn5)
+	# dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([128, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_rl5, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return bn_mean1, bn_var1, out_conv1, out_bn1, hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, out_fc2, out_sm
+	return out_fc2, out_sm
+
+def volume_bnnet2_l6_56(input):
+	#bn_mean = tf.constant(0, dtype=tf.float32)
+	#bn_variance = tf.constant(1, dtype=tf.float32)
+	bn_variance_epsilon = tf.constant(0.0000000000001, dtype=tf.float32)
+
+	w_conv1 = tf.Variable(tf.random_normal([3, 3, 3, 1, 64], stddev=0.1), dtype=tf.float32, name='w_conv1')
+	#b_conv1 = tf.Variable(tf.random_normal(shape=[16], stddev=0.1), dtype=tf.float32, name='b_conv1')
+	out_conv1 = tf.nn.conv3d(input, w_conv1, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean1, bn_var1 = tf.nn.moments(out_conv1, 0)
+	r_bn1 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn1')
+	b_bn1 = tf.Variable(tf.random_normal([54, 54, 54, 64], stddev=0.1), dtype=tf.float32, name='b_bn1')
+	out_bn1 = tf.nn.batch_normalization(out_conv1, bn_mean1, bn_var1, b_bn1, r_bn1, bn_variance_epsilon)
+	hidden_conv1 = tf.nn.max_pool3d(tf.nn.relu(out_bn1), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv1 ,the output size is batch_sizex27x27x27x16([batch_size,in_deep,width,height,output_deep])
+	w_conv2 = tf.Variable(tf.random_normal([4, 4, 4, 64, 128], stddev=0.1), dtype=tf.float32, name='w_conv2')
+	#b_conv2 = tf.Variable(tf.random_normal(shape=[32], stddev=0.1), dtype=tf.float32, name='b_conv2')
+	out_conv2 = tf.nn.conv3d(hidden_conv1, w_conv2, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean2, bn_var2 = tf.nn.moments(out_conv2, 0)
+	r_bn2 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn2')
+	b_bn2 = tf.Variable(tf.random_normal([24, 24, 24, 128], stddev=0.1), dtype=tf.float32, name='b_bn2')
+	out_bn2 = tf.nn.batch_normalization(out_conv2, bn_mean2, bn_var2, b_bn2, r_bn2, bn_variance_epsilon)
+	hidden_conv2 = tf.nn.max_pool3d(tf.nn.relu(out_bn2), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv2 ,the output size is batch_sizex12x12x12x32([batch_size,in_deep,width,height,output_deep])
+	w_conv3 = tf.Variable(tf.random_normal([5, 5, 5, 128, 256], stddev=0.1), dtype=tf.float32, name='w_conv3')
+	#b_conv3 = tf.Variable(tf.random_normal(shape=[64], stddev=0.1), dtype=tf.float32, name='b_conv3')
+	out_conv3 = tf.nn.conv3d(hidden_conv2, w_conv3, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean3, bn_var3 = tf.nn.moments(out_conv3, 0)
+	r_bn3 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn3')
+	b_bn3 = tf.Variable(tf.random_normal([8, 8, 8, 256], stddev=0.1), dtype=tf.float32, name='b_bn3')
+	out_bn3 = tf.nn.batch_normalization(out_conv3, bn_mean3, bn_var3, b_bn3, r_bn3, bn_variance_epsilon)
+	hidden_conv3 = tf.nn.max_pool3d(tf.nn.relu(out_bn3), strides=[1, 2, 2, 2, 1], ksize=[1, 2, 2, 2, 1], padding='SAME')
+
+	# after conv3 ,the output size is batch_sizex4x4x4x64([batch_size,in_deep,width,height,output_deep])
+	w_conv4 = tf.Variable(tf.random_normal([4, 4, 4, 256, 512], stddev=0.1), dtype=tf.float32, name='w_conv4')
+	#b_conv4 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), dtype=tf.float32, name='b_conv4')
+	out_conv4 = tf.nn.conv3d(hidden_conv3, w_conv4, strides=[1, 1, 1, 1, 1], padding='VALID')
+	bn_mean4, bn_var4 = tf.nn.moments(out_conv4, 0)
+	r_bn4 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn4')
+	b_bn4 = tf.Variable(tf.random_normal([1, 1, 1, 512], stddev=0.1), dtype=tf.float32, name='b_bn4')
+	out_bn4 = tf.nn.batch_normalization(out_conv4, bn_mean4, bn_var4, b_bn4, r_bn4, bn_variance_epsilon)
+	hidden_conv4 = tf.nn.relu(out_bn4)
+
+	# after conv3 ,the output size is batch_sizex4x4x4x128([batch_size,in_deep,width,height,output_deep])
+	# all feature map flatten to one dimension vector,this vector will be much long
+	flattened_conv4 = tf.reshape(hidden_conv4, [-1, 512])
+	w_fc1 = tf.Variable(tf.random_normal([512, 512], stddev=0.1), name='w_fc1')
+	#b_fc1 = tf.Variable(tf.random_normal(shape=[128], stddev=0.1), name='b_fc1')
+	out_fc1 = tf.matmul(flattened_conv4, w_fc1)
+	r_bn5 = tf.Variable(tf.random_uniform([1], minval=0, maxval=2.0), dtype=tf.float32, name='r_bn5')
+	b_bn5 = tf.Variable(tf.random_normal([512], stddev=0.1), dtype=tf.float32, name='b_bn5')
+	bn_mean5, bn_var5 = tf.nn.moments(out_fc1, 0)
+	out_bn5 = tf.nn.batch_normalization(out_fc1, bn_mean5, bn_var5, b_bn5, r_bn5, bn_variance_epsilon)
+	out_rl5 = tf.nn.relu(out_bn5)
+	# dropout_fc1 = tf.nn.dropout(out_fc1,keep_prob)
+
+	w_fc2 = tf.Variable(tf.random_normal([512, 2], stddev=0.1), name='w_fc2')
+	b_fc2 = tf.Variable(tf.random_normal(shape=[2], stddev=0.1), name='b_fc2')
+	out_fc2 = tf.add(tf.matmul(out_rl5, w_fc2), b_fc2)
+
+	out_sm = tf.nn.softmax(out_fc2)
+
+	#return w_conv1, w_conv2, out_conv1, out_bn1, hidden_conv1, hidden_conv2, hidden_conv3, out_fc1, out_fc2, out_sm
+	return out_fc2, out_sm
