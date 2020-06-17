@@ -1,3 +1,0 @@
-可视化工具CT_view_tool.py
-slic分割工具CT_slic_tool.py
-候选检测代码detection_by_candidate.py（可生成候选检测可视化结果）
