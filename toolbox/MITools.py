@@ -164,6 +164,22 @@ def correct_luna_annotations(annofile, filelist, outputfile):
 	output_frame = pd.DataFrame(data=corrannos, columns=['seriesuid', 'coordX', 'coordY', 'coordZ', 'diameter_mm'])
 	output_frame.to_csv(outputfile, index=False)
 
+
+def get_dicom_paths(root_path):
+	paths = set()
+	for tmp in os.listdir(root_path):
+		temppath = root_path + os.sep + tmp
+		if os.path.isdir(temppath):  # 判断是否目录
+			paths.update(get_dicom_paths(temppath))
+		elif os.path.isfile(temppath):  # 判断是否文件
+			filename = os.path.basename(temppath)
+			filepre, fileext = os.path.splitext(filename)
+			if fileext=='.dcm':
+				serie_path = os.path.split(temppath)[0]
+				paths.add(serie_path)
+	return list(paths)
+	
+
 def get_dicom_spacing(case_path, mode='imageposition'):
 	slices = os.listdir(case_path)
 	for slice in slices:
@@ -207,48 +223,134 @@ def get_dicom_spacing(case_path, mode='imageposition'):
 	else:
 		return None
 
+
 def read_dicom_scan(case_path):
+    slices = os.listdir(case_path)
+    zpositions = []
+    infos = []
+    for slice in slices:
+        if slice[-3:] != 'xml':
+            info = pdc.read_file(case_path + '/' + slice)
+            zpositions.append(float(info.ImagePositionPatient[2]))
+            infos.append(info)
+    if len(infos) == 0:
+        return None, None
+
+    volume = np.zeros((len(infos), infos[0].pixel_array.shape[0], infos[0].pixel_array.shape[1]), dtype=int)
+    zparray = np.float_(zpositions)
+    indices = zparray.argsort()
+
+    volinfo = {}
+    volinfo['uid'] = infos[0].StudyInstanceUID
+    oriposition = infos[indices[0]].ImagePositionPatient
+    origin = [float(oriposition[2]), float(oriposition[1]), float(oriposition[0])]
+    volinfo['origin'] = origin
+
+    volinfo['zpositions'] = []
+    spacingstat = ([], [])
+    for i in range(len(indices)):
+        info = infos[indices[i]]
+        volume[i] = info.pixel_array * float(info.RescaleSlope) + int(info.RescaleIntercept)
+        volinfo['zpositions'].append(zpositions[indices[i]])
+        spacingstat[0].append(zpositions[indices[i]] - zpositions[indices[i - 1]])
+        spacingstat[1].append(info.PixelSpacing)
+    ststat, stcounts = np.unique(spacingstat[0], return_counts=True)
+    spstat, spcounts = np.unique(spacingstat[1], return_counts=True, axis=0)
+    slicethickness = ststat[stcounts.argmax()]
+    spacing = spstat[spcounts.argmax()].astype(float)
+    volinfo['spacing'] = (slicethickness, spacing[1], spacing[0])
+
+    return volume, volinfo
+
+
+def read_hmh_scan(case_path):
 	slices = os.listdir(case_path)
+	#reader = sitk.ImageSeriesReader()
+	#try:
+	#	slices = reader.GetGDCMSeriesFileNames(case_path)
+	#except:
+	#	return None, None
+
+	# collect slices' information
 	zpositions = []
+	inumbers = []
 	infos = []
 	for slice in slices:
-		if slice[-3:]!='xml':
+		if os.path.splitext(slice)[-1]=='.dcm':
 			info = pdc.read_file(case_path+'/'+slice)
+			#print(info.ImageType[-1])
+			if not hasattr(info, 'ImageType'):
+				return None, None
+			elif len(info.ImageType) < 3 or info.ImageType[2] not in ('HELICAL', 'AXIAL', 'CT_SOM5 SPI'):	#this is not valid CT image
+				#print(case_path + ' is not valid CT image ')
+				if len(slices) > 10:
+					print('image type: {}' .format(info.ImageType))
+					#raise('unknown CT type %s' %(case_path))
+				return None, None
 			zpositions.append(float(info.ImagePositionPatient[2]))
+			inumbers.append(int(info.InstanceNumber))
 			infos.append(info)
-	if len(infos)==0:
+	#if len(infos) <= 5:
+	#	print(case_path + ' contains less than 5 scans.')
+	#	return None, None
+	if len(infos) == 0:
 		return None, None
 
-	volume = np.zeros((len(infos), infos[0].pixel_array.shape[0], infos[0].pixel_array.shape[1]), dtype=int)
-	zparray = np.float_(zpositions)
-	indices = zparray.argsort()
-
-	volinfo = {}
-	volinfo['uid'] = infos[0].StudyInstanceUID
-	oriposition = infos[indices[0]].ImagePositionPatient
-	origin = [float(oriposition[2]), float(oriposition[1]), float(oriposition[0])]
-	volinfo['origin'] = origin
-	#info = infos[0]
-	#pixelspacing = info.PixelSpacing
-	#slicethickness = zpositions[indices[1]] - zpositions[indices[0]]
-	#spacing = [slicethickness, float(pixelspacing[1]), float(pixelspacing[0])]
-	#volinfo['spacing'] = spacing
-
-	volinfo['zpositions'] = []
-	spacingstat = ([], [])
-	for i in range(len(indices)):
+	# merge the information from different slices
+	inarray = np.int_(inumbers)
+	indices = inarray.argsort()
+	zparray = np.float_(zpositions)[indices]
+	#if len(zparray) > 1:
+		#if zparray[1] < zparray[0]:
+			#print(case_path + ' slice reverse')
+			#infos = infos
+		#else:
+			#print(case_path)
+	#oriind = zparray.argmin()
+	volinfo = {'pixel_array':[]}
+	datainfo = {}
+	for i in range(len(zpositions)):
 		info = infos[indices[i]]
-		volume[i] = info.pixel_array * float(info.RescaleSlope) + int(info.RescaleIntercept)
-		volinfo['zpositions'].append(zpositions[indices[i]])
-		spacingstat[0].append(zpositions[indices[i]] - zpositions[indices[i-1]])
-		spacingstat[1].append(info.PixelSpacing)
-	ststat, stcounts = np.unique(spacingstat[0], return_counts=True)
-	spstat, spcounts = np.unique(spacingstat[1], return_counts=True, axis=0)
-	slicethickness = ststat[stcounts.argmax()]
-	spacing = spstat[spcounts.argmax()].astype(float)
-	volinfo['spacing'] = (slicethickness, spacing[1], spacing[0])
+		for ikey in info.dir():
+			if ikey not in datainfo.keys():
+				datainfo[ikey] = [info[ikey].value]
+			else:
+				datainfo[ikey].append(info[ikey].value)
+		volinfo['pixel_array'].append(info.pixel_array)
+	volinfo['pixel_array'] = np.int_(np.array(volinfo['pixel_array']) * float(info.RescaleSlope) + int(info.RescaleIntercept))
+	#volinfo['origin'] = datainfo['ImagePositionPatient'][oriind][::-1]
+	dikeys = list(datainfo.keys())
+	for ikey in dikeys:
+		try:
+			infostat = set(datainfo[ikey])
+			if len(infostat) == 1:
+				datainfo[ikey] = infostat.pop()
+			else:
+				datainfo.pop(ikey)
+		except:
+			try:
+				infostat, infocounts = np.unique(datainfo[ikey], axis=0, return_counts=True)
+				if len(infocounts) == 1:
+					datainfo[ikey] = infostat[0]
+				else:
+					datainfo.pop(ikey)
+			except:
+				datainfo.pop(ikey)
+	try:
+		volinfo['uid'] = datainfo['SeriesInstanceUID']
+	except:
+		print('This path contains more than 1 series.')
+	#zparray.sort()
+	spacing = datainfo['PixelSpacing'][::-1]
+	if len(zparray) > 1:
+		slicethicknesses = zparray[1:] - zparray[:-1]
+		ststat, stcounts = np.unique(slicethicknesses, return_counts=True)
+		slice_thickness = abs(ststat[stcounts.argmax()])
+		spacing = np.concatenate(([slice_thickness], spacing))
+	volinfo['spacing'] = spacing
+	
+	return volinfo, datainfo
 
-	return volume, volinfo
 
 def sph_arrange(case_path, output_path='.'):
 	for s in os.listdir(case_path):
@@ -289,6 +391,7 @@ def read_sph_scan(case_path):
 		if max_serie_count < serie_count[siuid]:
 			max_serie_count = serie_count[siuid]
 			max_serie = siuid
+
 	if mess: print(case_path + ' slices mess.')
 	dicom_series = []
 	instance_numbers = []
@@ -448,7 +551,7 @@ def local_crop(full_scan, nodule_coordinate, box_shape, padding=config['MIN_BOUN
 		full_scan = np.pad(full_scan, ((box_prehalf[0], box_afthalf[0]), (box_prehalf[1], box_afthalf[1]), (box_prehalf[2], box_afthalf[2])), 'constant', constant_values = ((padding, padding), (padding, padding), (padding, padding)))
 		zyx_1 = v_center
 		zyx_2 = v_center + np.array(box_shape)
-	vol_crop = full_scan[zyx_1[0]:zyx_2[0], zyx_1[1]:zyx_2[1], zyx_1[2]:zyx_2[2]]  # ---截取立方体
+	vol_crop = full_scan[zyx_1[0]:zyx_2[0], zyx_1[1]:zyx_2[1], zyx_1[2]:zyx_2[2]]  #cropping the cube
 	return vol_crop
 
 def mask_box(mask, square=False, overbound=True):
@@ -539,23 +642,13 @@ def box_sample(full_scan, nodule_coordinate, box_size, resize_factor=None):
 	box_posthalf = box_size - box_prehalf
 	if resize_factor is not None:
 		box_size = np.int_(np.ceil(box_size / resize_factor))
-	'''
-	v_center = np.array(nodule_coordinate)
-	zyx_1 = v_center - box_size
-	zyx_2 = v_center + box_size
-	if zyx_1.min()<0 or (np.array(full_scan.shape)-zyx_2).min()<0:
-		full_scan = np.pad(full_scan, ((box_size[0], box_size[0]), (box_size[1], box_size[1]), (box_size[2], box_size[2])), 'constant', constant_values = ((config['MIN_BOUND'], config['MIN_BOUND']), (config['MIN_BOUND'], config['MIN_BOUND']), (config['MIN_BOUND'], config['MIN_BOUND'])))
-		zyx_1 = v_center
-		zyx_2 = v_center + 2 * box_size
-	vol_crop = full_scan[zyx_1[0]:zyx_2[0], zyx_1[1]:zyx_2[1], zyx_1[2]:zyx_2[2]]  # ---截取立方体
-	'''
 	vol_crop = local_crop(full_scan, nodule_coordinate, box_size)
 	if resize_factor is not None:
         	vol_crop = scipy.ndimage.interpolation.zoom(vol_crop, resize_factor, mode='nearest')
 	bottom_coord = np.int_(np.array(vol_crop.shape)/2-box_prehalf)
 	top_coord = np.int_(np.array(vol_crop.shape)/2+box_posthalf)
 	nodule_box = vol_crop[bottom_coord[0]:top_coord[0], bottom_coord[1]:top_coord[1], bottom_coord[2]:top_coord[2]]
-	#nodule_box = vol_crop[int(vol_crop.shape[0]/2-box_prehalf):int(vol_crop.shape[0]/2+box_size-box_prehalf), int(vol_crop.shape[1]/2-box_prehalf):int(vol_crop.shape[1]/2+box_size-box_prehalf), int(vol_crop.shape[2]/2-box_prehalf):int(vol_crop.shape[2]/2+box_size-box_prehalf)]  # ---将截取的立方体置于nodule_box
+	#nodule_box = vol_crop[int(vol_crop.shape[0]/2-box_prehalf):int(vol_crop.shape[0]/2+box_size-box_prehalf), int(vol_crop.shape[1]/2-box_prehalf):int(vol_crop.shape[1]/2+box_size-box_prehalf), int(vol_crop.shape[2]/2-box_prehalf):int(vol_crop.shape[2]/2+box_size-box_prehalf)]
 	return nodule_box
 
 def spherical_sample(full_scan, nodule_coordinate, spacing, splitnum, spacesize_mm=50, imgsize=224):
