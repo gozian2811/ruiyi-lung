@@ -312,6 +312,21 @@ def extend_mask(imagemask, ball_size=4, iterations=15):
 	mask = binary_closing(mask, structure=struct, iterations=iterations)
 	return mask[padding:imagemask.shape[0]+padding, padding:imagemask.shape[1]+padding, padding:imagemask.shape[2]+padding]
 
+def fill_hole(mask, slicewise = False):
+	if slicewise:
+		for m in range(len(mask)):
+			labels = measure.label(1-mask[m], background=0)
+			bglabel = labels[mask[m]==0][0]
+			for l in np.unique(labels):
+				mask[m][np.logical_and(labels==l, labels!=bglabel)] = 1
+	else:
+		labels = measure.label(1-mask, background=0)
+		bglabel = labels[mask==0][0]
+		for l in np.unique(labels):
+			mask[np.logical_and(labels==l, labels!=bglabel)] = 1
+	return mask
+
+
 def del_surplus(lung_mask, image):
 	for z in range(lung_mask.shape[0]):
 		slice_z = lung_mask[z,:,:]       #轴向切片
