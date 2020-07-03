@@ -264,6 +264,7 @@ def read_dicom_scan(case_path):
 
 
 def read_hmh_scan(case_path):
+	def read_hmh_scan(case_path):
 	slices = os.listdir(case_path)
 	#reader = sitk.ImageSeriesReader()
 	#try:
@@ -307,9 +308,10 @@ def read_hmh_scan(case_path):
 		#else:
 			#print(case_path)
 	#oriind = zparray.argmin()
-	volinfo = {'pixel_array':[]}
+	volinfo = {'dcm_files':[], 'pixel_array':[]}
 	datainfo = {}
-	for i in range(len(zpositions)):
+	for i in range(len(slices)):
+		volinfo['dcm_files'].append(slices[indices[i]])
 		info = infos[indices[i]]
 		for ikey in info.dir():
 			if ikey not in datainfo.keys():
