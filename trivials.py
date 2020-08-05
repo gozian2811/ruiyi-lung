@@ -123,6 +123,69 @@ def detection_evaluation():
 	assessment = eva.detection_assessment(results, annotation_file, label=1)
 	eva.evaluation_vision([], assessment['num_scans'], assessment['FROC'][0], assessment['FROC'][1], assessment['CPM'], assessment['detection_cites'], output_path=evaluation_path)
 
+def filename_arrange(source_path="sph_cubes_64_overbound/npy", target_path="lung adenocarcinoma samples of the private dataset"):
+	filenames = os.listdir(source_path)
+	ids = []
+	for filename in filenames:
+		fnsplit = os.path.splitext(filename)[0].split('_')
+		if len(fnsplit)>1:
+			if (fnsplit[0], fnsplit[1]) not in ids: ids.append((fnsplit[0], fnsplit[1]))
+			idx = ids.index((fnsplit[0], fnsplit[1])) + 1
+			label = fnsplit[2]
+			#pidx = fnsplit[-1][1:]
+			#newname = "sample%d_%s_patch%s.png" %(idx, label, pidx)
+			newname = "sample%d_%s.npy" %(idx, label)
+			newpath = target_path+'/'+label
+			if not os.path.exists(newpath):
+				os.makedirs(newpath)
+			shutil.copy(source_path+'/'+filename, newpath+'/'+newname)
+
+def featuremap_visualize(files, names = [], num_channels = 20):
+	fig = plt.figure()
+	#fig = plt.figure(figsize=(12, 3.5))
+	#plt.title('channels')
+	#fig, ax = plt.subplots(len(files), 1)
+	fms = []
+	axs = []
+	for f in range(len(files)):
+		if isinstance(files[f], str):
+			featuremap = np.load(files[f])
+			ax = fig.add_subplot(len(files), 1, f+1)
+			fm = ax.imshow(featuremap[0], vmin=0, vmax=1)
+			ax.set_xticks(np.append(np.arange(0, featuremap.shape[2], featuremap.shape[2]//num_channels), featuremap.shape[2]-1))
+			ax.set_xticklabels(np.arange(0, num_channels+1))
+			ax.set_yticks([])
+			#ax.set_yticks([0, featuremap.shape[1]-1])
+			#ax.set_yticklabels([0, 1])
+			#ax.set_title('channels')
+			if f==0: 
+				ax.set_xlabel('channels')
+				ax.xaxis.set_label_position('top')
+			ax.set_ylabel('layer %d' %(f + 1))
+			axs.append(ax)
+			fms.append(fm)
+		else:
+			aaxs = []
+			file_nums = [len(file_approach) for file_approach in files]
+			for l in range(len(files[f])):
+				featuremap = np.load(files[f][l])
+				ax = fig.add_subplot(sum(file_nums), 1, sum(file_nums[:f])+l+1)
+				fm = ax.imshow(featuremap[0], vmin=0, vmax=1)
+				ax.set_xticks(np.append(np.arange(0, featuremap.shape[2], featuremap.shape[2]//num_channels), featuremap.shape[2]-1))
+				ax.set_xticklabels(np.arange(0, num_channels+1))
+				ax.set_yticks([])
+				ax.set_ylabel('layer %d'%(l*3+1), rotation=0)
+				aaxs.append(ax)
+				fms.append(fm)
+			aaxs[-1].set_xlabel(names[f])
+			#aaxs[0].set_title('channels')
+			axs.extend(aaxs)
+	#plt.subplots_adjust(left=-1, hspace=5)
+	fig.colorbar(fms[0], ax=axs)
+	plt.show()
+	plt.close()
+			
+featuremap_visualize(files=[['fmn1l1.npy', 'fmn1l4.npy'], ['fmtr1l1.npy', 'fmtr1l4.npy'], ['fmt1l1.npy', 'fmt1l4.npy'], ['fms1l1.npy', 'fms1l4.npy']], names=['DNC learning simply on LIDC-IDRI', 'transfer learning', 'multitask learning', 'bias-undoing learning'])
 '''
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('integers', metavar='N', type=int, nargs='+',
@@ -132,4 +195,4 @@ parser.add_argument('--sum', dest='accumulate', action='store_const',
 args = parser.parse_args()
 print(args.accumulate(args.integers))
 '''
-detection_evaluation()
+#detection_evaluation()
