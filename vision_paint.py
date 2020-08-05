@@ -182,6 +182,8 @@ def scatter_paint(point_file, label_file):
 scatter_paint_datasets(["experiments/experiments_cl/MultiTaskNet_classification_3_fold1_epoch900/MultiTaskNet_classification_3_fold1_epoch900_feature_avgp",
                         "experiments/experiments_cl/MultiTaskNet_classification_3_fold1_epoch900/MultiTaskNet_classification_3_fold1_epoch900_feature2_avgp"],
                         filewise=True, names=['LIDC-IDRI', 'LA-SPH'])
+#roc_paint(roc_path="experiments/rocs_trand", roc_files=["$L=4$ $k=12$.npy", "$L=4$ $k=14$.npy", "$L=4$ $k=16$.npy"], xlabel='假阳率', ylabel='真阳率', output_file="roc_curve L=4.pdf")
+#roc_paint(roc_path="experiments/rocs_trand", roc_files=["$L=2$ $k=14$.npy", "$L=3$ $k=14$.npy", "$L=4$ $k=14$.npy", "$L=5$ $k=14$.npy"], xlabel='假阳率', ylabel='真阳率', output_file="roc_curve k=14.pdf")
 #curves_paint(curve_path="experiments/validations/p111", names_loc='lower right', length_limit=0, smooth=11, linestyles=['dashed', 'dashdot'])
 #curves_paint(curve_path="experiments/validations/baseweightsharedbnnet_lidc_bNA", xlabel='轮次', ylabel='准确率', length_limit=0, smooth=6)
 #curves_paint(curve_path="experiments/validations/baseweightsharednet_densecropnet_lidc_bNA", xlabel='轮次', ylabel='准确率', names_loc='middle right', length_limit=0, smooth=6)
