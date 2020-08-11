@@ -760,6 +760,29 @@ class LIDCCrop(CTCrop):
 			skimage.io.imsave(os.path.join(self.nodules_slicewise_path, "%s_hs_s%d.png" %(store_name, i+1)), shapeslice)
 			skimage.io.imsave(os.path.join(self.nodules_slicewise_path, "%s_hvv_s%d.png" %(store_name, i+1)), textureslice)
 		
+	def mask_sample(self, start = 0):
+		self.mask_path = self.output_path + "/masks"
+		if not os.access(self.mask_path, os.F_OK): os.mkdir(self.mask_path)
+		for patient in enumerate(tqdm(self.ls_all_patients[start:])):
+			patient = patient[1]
+			print(patient)
+			if self.error_patients.count(patient)>0:
+				print('Data error, ignored!')
+				continue
+			series_id = patient.split('/')[-1]
+			nodules, nonnodules = lt.parseXML(patient)
+			transed_nodule_list, image, spacing = lt.coord_trans(nodules, patient)
+			filled_nodule_list = lt.fill_hole(transed_nodule_list, image.shape[0], image.shape[1], image.shape[2])
+			#if expert_wise:
+			#	nodule_list = filled_nodule_list
+			#else:
+			#	filled_nodule_list = lt.fuse_nodules(filled_nodule_list)
+			#	nodule_list = lt.calc_union_freq(filled_nodule_list)
+			mask = np.zeros_like(image)
+			for nodule_info in filled_nodule_list:
+				mask[nodule_info['mask']!=0] = 1
+			np.save(self.mask_path + '/' + series_id, mask)
+		
 	def pathology_crop(self, target_spacing=None, expert_wise=False, start=0):
 		#target_spacing = np.array(target_spacing)
 		if hasattr(self, 'nodules_ipris_path'):
