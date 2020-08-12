@@ -778,7 +778,7 @@ class LIDCCrop(CTCrop):
 			#else:
 			#	filled_nodule_list = lt.fuse_nodules(filled_nodule_list)
 			#	nodule_list = lt.calc_union_freq(filled_nodule_list)
-			mask = np.zeros_like(image)
+			mask = np.zeros_like(image, dtype=bool)
 			for nodule_info in filled_nodule_list:
 				mask[nodule_info['mask']!=0] = 1
 			np.save(self.mask_path + '/' + series_id, mask)
